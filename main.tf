@@ -53,22 +53,22 @@ data "google_compute_address" "default" {
 }
 
 module "nat-gateway" {
-  source             = "github.com/GoogleCloudPlatform/terraform-google-managed-instance-group"
-  project            = "${var.project}"
-  region             = "${var.region}"
-  zone               = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  network            = "${var.network}"
-  subnetwork         = "${var.subnetwork}"
-  target_tags        = ["${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"]
-  machine_type       = "${var.machine_type}"
-  name               = "${var.name}nat-gateway-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  compute_image      = "debian-cloud/debian-8"
-  size               = 1
-  network_ip         = "${var.ip}"
-  can_ip_forward     = "true"
-  service_port       = "80"
-  service_port_name  = "http"
-  startup_script     = "${data.template_file.nat-startup-script.rendered}"
+  source            = "github.com/urbn/terraform-google-managed-instance-group"
+  project           = "${var.project}"
+  region            = "${var.region}"
+  zone              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  network           = "${var.network}"
+  subnetwork        = "${var.subnetwork}"
+  target_tags       = ["${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"]
+  machine_type      = "${var.machine_type}"
+  name              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
+  compute_image     = "debian-cloud/debian-8"
+  size              = 1
+  network_ip        = "${var.ip}"
+  can_ip_forward    = "true"
+  service_port      = "80"
+  service_port_name = "http"
+  startup_script    = "${data.template_file.nat-startup-script.rendered}"
   wait_for_instances = true
 
   access_config = [
@@ -79,18 +79,18 @@ module "nat-gateway" {
 }
 
 resource "google_compute_route" "nat-gateway" {
-  name                   = "${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  name                   = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
   project                = "${var.project}"
   dest_range             = "0.0.0.0/0"
   network                = "${data.google_compute_network.network.self_link}"
   next_hop_instance      = "${element(split("/", element(module.nat-gateway.instances[0], 0)), 10)}"
   next_hop_instance_zone = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  tags                   = ["${compact(concat(list("${var.name}nat-${var.region}"), var.tags))}"]
+  tags                   = ["${compact(concat(list("${var.region}-egress"), var.tags))}"]
   priority               = "${var.route_priority}"
 }
 
 resource "google_compute_firewall" "nat-gateway" {
-  name    = "${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  name    = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
   network = "${var.network}"
   project = "${var.project}"
 
@@ -98,13 +98,13 @@ resource "google_compute_firewall" "nat-gateway" {
     protocol = "all"
   }
 
-  source_tags = ["${compact(concat(list("${var.name}nat-${var.region}", "${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"), var.tags))}"]
-  target_tags = ["${compact(concat(list("${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"), var.tags))}"]
+  source_tags = ["${compact(concat(list("${var.region}-egress", "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"), var.tags))}"]
+  target_tags = ["${compact(concat(list("${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"), var.tags))}"]
 }
 
 resource "google_compute_address" "default" {
   count   = "${var.ip_address_name == "" ? 1 : 0}"
-  name    = "${var.name}nat-${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  name    = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
   project = "${var.project}"
   region  = "${var.region}"
 }
