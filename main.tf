@@ -39,9 +39,9 @@ data "google_compute_address" "default" {
 locals {
   zone          = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
   name          = "${var.name}nat-gateway-${local.zone}"
-  instance_tags = ["inst-${local.zonal_tag}", "inst-${local.regional_tag}"]
-  zonal_tag     = "${var.name}nat-${local.zone}"
-  regional_tag  = "${var.name}nat-${var.region}"
+  instance_tags = ["${local.zonal_tag}"]
+  zonal_tag     = "${local.zone}-egress"
+  regional_tag  = "${var.region}-egress"
 }
 
 module "nat-gateway" {
@@ -63,8 +63,7 @@ module "nat-gateway" {
   metadata           = "${var.metadata}"
   ssh_source_ranges  = "${var.ssh_source_ranges}"
   http_health_check  = "${var.autohealing_enabled}"
-
-  update_strategy = "ROLLING_UPDATE"
+  update_strategy    = "ROLLING_UPDATE"
 
   rolling_update_policy = [{
     type                  = "PROACTIVE"
@@ -89,7 +88,7 @@ resource "google_compute_route" "nat-gateway" {
   network                = "${data.google_compute_network.network.self_link}"
   next_hop_instance      = "${element(split("/", element(module.nat-gateway.instances[0], 0)), 10)}"
   next_hop_instance_zone = "${local.zone}"
-  tags                   = ["${compact(concat(list("${local.regional_tag}", "${local.zonal_tag}"), var.tags))}"]
+  tags                   = ["${compact(concat(local.instance_tags, var.tags))}"]
   priority               = "${var.route_priority}"
 }
 
