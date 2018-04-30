@@ -26,7 +26,7 @@ output gateway_ip {
 
 output instance {
   description = "The self link to the NAT gateway instance."
-  value       = "${element(module.nat-gateway.instances[0], 0)}"
+  value       = "${element(concat(module.nat-gateway.instances[0], list("")), 0)}"
 }
 
 output external_ip {
