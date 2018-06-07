@@ -54,7 +54,7 @@ data "google_compute_address" "default" {
 }
 
 module "nat-gateway" {
-  source            = "github.com/urbn/terraform-google-managed-instance-group"
+  source            = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
   project           = "${var.project}"
   region            = "${var.region}"
   zone              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
@@ -71,6 +71,8 @@ module "nat-gateway" {
   service_port_name = "http"
   startup_script    = "${data.template_file.nat-startup-script.rendered}"
   wait_for_instances = true
+  health_check_type = "HTTP"
+
 
   access_config = [
     {
