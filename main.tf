@@ -37,25 +37,25 @@ data "google_compute_address" "default" {
 }
 
 module "nat-gateway" {
-  source            = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
+  source             = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
   module_enabled     = "${var.module_enabled}"
-  project           = "${var.project}"
-  region            = "${var.region}"
-  zone              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  network           = "${var.network}"
-  subnetwork        = "${var.subnetwork}"
-  target_tags       = ["${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"]
-  machine_type      = "${var.machine_type}"
-  name              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
-  compute_image     = "debian-cloud/debian-9"
-  size              = 1
-  network_ip        = "${var.ip}"
-  can_ip_forward    = "true"
-  service_port      = "80"
-  service_port_name = "http"
-  startup_script    = "${data.template_file.nat-startup-script.rendered}"
+  project            = "${var.project}"
+  region             = "${var.region}"
+  zone               = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  network            = "${var.network}"
+  subnetwork         = "${var.subnetwork}"
+  target_tags        = ["${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"]
+  machine_type       = "${var.machine_type}"
+  name               = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
+  compute_image      = "debian-cloud/debian-9"
+  size               = 1
+  network_ip         = "${var.ip}"
+  can_ip_forward     = "true"
+  service_port       = "80"
+  service_port_name  = "http"
+  startup_script     = "${data.template_file.nat-startup-script.rendered}"
   wait_for_instances = true
-  health_check_type = "HTTP"
+  health_check_type  = "HTTP"
 
 
   access_config = [
