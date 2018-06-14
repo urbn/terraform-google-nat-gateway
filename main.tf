@@ -57,6 +57,7 @@ module "nat-gateway" {
   wait_for_instances = true
   health_check_type  = "HTTP"
   metadata           = "${var.metadata}"
+  ssh_source_ranges  = "${var.ssh_source_ranges}"
 
   access_config = [
     {
