@@ -56,7 +56,7 @@ module "nat-gateway" {
   startup_script     = "${data.template_file.nat-startup-script.rendered}"
   wait_for_instances = true
   health_check_type  = "HTTP"
-
+  metadata           = "${var.metadata}"
 
   access_config = [
     {
