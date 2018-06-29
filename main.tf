@@ -45,6 +45,7 @@ module "nat-gateway" {
   network            = "${var.network}"
   subnetwork         = "${var.subnetwork}"
   target_tags        = ["${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"]
+  instance_labels    = "${var.instance_labels}"
   machine_type       = "${var.machine_type}"
   name               = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
   compute_image      = "debian-cloud/debian-9"
