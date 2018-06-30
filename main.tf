@@ -70,7 +70,7 @@ resource "google_compute_route" "nat-gateway" {
   count                  = "${var.module_enabled ? 1 : 0}"
   name                   = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
   project                = "${var.project}"
-  dest_range             = "0.0.0.0/0"
+  dest_range             = "${var.dest_range}"
   network                = "${data.google_compute_network.network.self_link}"
   next_hop_instance      = "${(length(module.nat-gateway.instances) > 0 && length(module.nat-gateway.instances[0]) > 0) ? element(split("/", element(concat(module.nat-gateway.instances[0], list("")), 0)), 10): ""}"
   next_hop_instance_zone = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
