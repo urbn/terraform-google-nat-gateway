@@ -37,7 +37,12 @@ data "google_compute_address" "default" {
 }
 
 module "nat-gateway" {
+<<<<<<< HEAD
   source             = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
+=======
+  source             = "GoogleCloudPlatform/managed-instance-group/google"
+  version            = "1.1.8"
+>>>>>>> 384dd50... Update main.tf
   module_enabled     = "${var.module_enabled}"
   project            = "${var.project}"
   region             = "${var.region}"
