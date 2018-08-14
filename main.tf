@@ -62,8 +62,9 @@ module "nat-gateway" {
   health_check_type  = "HTTP"
   metadata           = "${var.metadata}"
   ssh_source_ranges  = "${var.ssh_source_ranges}"
+  http_health_check  = "${var.autohealing_enabled}"
 
-  update_strategy    = "ROLLING_UPDATE"
+  update_strategy = "ROLLING_UPDATE"
 
   rolling_update_policy = [{
     type                  = "PROACTIVE"
