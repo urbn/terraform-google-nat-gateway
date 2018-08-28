@@ -114,7 +114,7 @@ variable instance_labels {
 
 variable autohealing_enabled {
   description = "Enable instance autohealing using http health check"
-  default     = false
+  default     = true
 }
 
 variable region_params {

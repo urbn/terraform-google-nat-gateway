@@ -38,9 +38,9 @@ data "google_compute_address" "default" {
 
 locals {
   zone          = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  name          = "${var.name}nat-gateway-${local.zone}"
   instance_tags = ["${local.zonal_tag}"]
   zonal_tag     = "${local.zone}-egress"
+  name          = "${local.zonal_tag}"
   regional_tag  = "${var.region}-egress"
 }
 
@@ -52,6 +52,11 @@ module "nat-gateway" {
   zone               = "${local.zone}"
   network            = "${var.network}"
   subnetwork         = "${var.subnetwork}"
+  target_tags        = ["${local.instance_tags}"]
+  instance_labels    = "${var.instance_labels}"
+  machine_type       = "${var.machine_type}"
+  name               = "${local.name}"
+  compute_image      = "${var.compute_image}"
   size               = 1
   network_ip         = "${var.ip}"
   can_ip_forward     = "true"
@@ -88,7 +93,7 @@ resource "google_compute_route" "nat-gateway" {
   network                = "${data.google_compute_network.network.self_link}"
   next_hop_instance      = "${element(split("/", element(module.nat-gateway.instances[0], 0)), 10)}"
   next_hop_instance_zone = "${local.zone}"
-  tags                   = ["${compact(concat(local.instance_tags, var.tags))}"]
+  tags                   = ["${compact(concat(list(local.regional_tag), var.tags))}"]
   priority               = "${var.route_priority}"
 }
 
