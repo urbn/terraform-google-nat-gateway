@@ -18,12 +18,12 @@ variable region {
   default = "us-west1"
 }
 
-variable zone {
-  default = "us-west1-b"
+variable zones {
+  default = ["us-west1-a", "us-west1-b", "us-west1-c"]
 }
 
 variable network_name {
-  default = "tf-ci-nat-gke-zonal"
+  default = "tf-ci-ha-nat-gke-regional"
 }
 
 data "google_client_config" "current" {}
@@ -33,7 +33,7 @@ provider google {
 }
 
 data "google_container_engine_versions" "default" {
-  zone = "${var.zone}"
+  zone = "${element(var.zones, 0)}"
 }
 
 resource "google_compute_network" "tf-ci" {
@@ -42,20 +42,27 @@ resource "google_compute_network" "tf-ci" {
 }
 
 resource "google_compute_subnetwork" "tf-ci" {
-  name                     = "${var.network_name}"
-  ip_cidr_range            = "10.127.0.0/20"
-  network                  = "${google_compute_network.tf-ci.self_link}"
-  region                   = "${var.region}"
+  name          = "${var.network_name}"
+  ip_cidr_range = "10.127.0.0/20"
+  network       = "${google_compute_network.tf-ci.self_link}"
+  region        = "${var.region}"
+
   private_ip_google_access = true
 }
 
 resource "google_container_cluster" "tf-ci" {
-  name               = "${var.network_name}"
-  zone               = "${var.zone}"
-  initial_node_count = 3
+  name               = "tf-ci-regional"
+  region             = "${var.region}"
+  additional_zones   = ["${var.zones}"]
+  initial_node_count = 1
   min_master_version = "${data.google_container_engine_versions.default.latest_node_version}"
   network            = "${google_compute_subnetwork.tf-ci.network}"
   subnetwork         = "${google_compute_subnetwork.tf-ci.name}"
+
+  timeouts {
+    create = "30m"
+    delete = "30m"
+  }
 }
 
 output network {
@@ -72,8 +79,4 @@ output cluster_name {
 
 output cluster_region {
   value = "${var.region}"
-}
-
-output cluster_zone {
-  value = "${google_container_cluster.tf-ci.zone}"
 }

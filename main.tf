@@ -15,31 +15,13 @@
  */
 
 data "template_file" "nat-startup-script" {
-  template = <<EOF
-#!/bin/bash -xe
+  template = "${file("${format("%s/config/startup.sh", path.module)}")}"
 
-# Enable ip forwarding and nat
-sysctl -w net.ipv4.ip_forward=1
-sed -i= 's/^[# ]*net.ipv4.ip_forward=[[:digit:]]/net.ipv4.ip_forward=1/g' /etc/sysctl.conf
-iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-
-apt-get update
-
-# Install nginx for instance http health check
-apt-get install -y nginx
-
-ENABLE_SQUID="${var.squid_enabled}"
-
-if [[ "$ENABLE_SQUID" == "true" ]]; then
-  apt-get install -y squid3
-
-  cat - > /etc/squid3/squid.conf <<'EOM'
-${file("${var.squid_config == "" ? "${format("%s/config/squid.conf", path.module)}" : var.squid_config}")}
-EOM
-
-  systemctl reload squid3
-fi
-EOF
+  vars {
+    squid_enabled = "${var.squid_enabled}"
+    squid_config  = "${var.squid_config}"
+    module_path   = "${path.module}"
+  }
 }
 
 data "google_compute_network" "network" {
@@ -48,52 +30,76 @@ data "google_compute_network" "network" {
 }
 
 data "google_compute_address" "default" {
-  name    = "${element(concat(google_compute_address.default.*.name, list("${var.ip_address_name}")), 0)}"
+  count   = "${var.ip_address_name == "" ? 0 : 1}"
+  name    = "${var.ip_address_name}"
   project = "${var.network_project == "" ? var.project : var.network_project}"
   region  = "${var.region}"
 }
 
-module "nat-gateway" {
-  source            = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
-  project           = "${var.project}"
-  region            = "${var.region}"
-  zone              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  network           = "${var.network}"
-  subnetwork        = "${var.subnetwork}"
-  target_tags       = ["${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"]
-  machine_type      = "${var.machine_type}"
-  name              = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
-  compute_image     = "debian-cloud/debian-8"
-  size              = 1
-  network_ip        = "${var.ip}"
-  can_ip_forward    = "true"
-  service_port      = "80"
-  service_port_name = "http"
-  startup_script    = "${data.template_file.nat-startup-script.rendered}"
-  wait_for_instances = true
-  health_check_type = "HTTP"
+locals {
+  zone          = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
+  instance_tags = ["${local.zonal_tag}"]
+  zonal_tag     = "${local.zone}-egress"
+  name          = "${local.zonal_tag}"
+  regional_tag  = "${var.region}-egress"
+}
 
+module "nat-gateway" {
+  source             = "git@github.com:urbn/terraform-google-managed-instance-group.git?ref=egress"
+  module_enabled     = "${var.module_enabled}"
+  project            = "${var.project}"
+  region             = "${var.region}"
+  zone               = "${local.zone}"
+  network            = "${var.network}"
+  subnetwork         = "${var.subnetwork}"
+  target_tags        = ["${local.instance_tags}"]
+  instance_labels    = "${var.instance_labels}"
+  machine_type       = "${var.machine_type}"
+  name               = "${local.name}"
+  compute_image      = "${var.compute_image}"
+  size               = 1
+  network_ip         = "${var.ip}"
+  can_ip_forward     = "true"
+  service_port       = "80"
+  service_port_name  = "http"
+  startup_script     = "${data.template_file.nat-startup-script.rendered}"
+  wait_for_instances = true
+  health_check_type  = "HTTP"
+  metadata           = "${var.metadata}"
+  ssh_source_ranges  = "${var.ssh_source_ranges}"
+  http_health_check  = "${var.autohealing_enabled}"
+  update_strategy    = "ROLLING_UPDATE"
+
+  rolling_update_policy = [{
+    type                  = "PROACTIVE"
+    minimal_action        = "REPLACE"
+    max_surge_fixed       = 0
+    max_unavailable_fixed = 1
+    min_ready_sec         = 30
+  }]
 
   access_config = [
     {
-      nat_ip = "${data.google_compute_address.default.address}"
+      nat_ip = "${element(concat(google_compute_address.default.*.address, data.google_compute_address.default.*.address, list("")), 0)}"
     },
   ]
 }
 
 resource "google_compute_route" "nat-gateway" {
-  name                   = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
+  count                  = "${var.module_enabled ? 1 : 0}"
+  name                   = "${local.zonal_tag}"
   project                = "${var.project}"
-  dest_range             = "0.0.0.0/0"
+  dest_range             = "${var.dest_range}"
   network                = "${data.google_compute_network.network.self_link}"
-  next_hop_instance      = "${(length(module.nat-gateway.instances) > 0 && length(module.nat-gateway.instances[0]) > 0) ? element(split("/", element(concat(module.nat-gateway.instances[0], list("")), 0)), 10): ""}"
-  next_hop_instance_zone = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}"
-  tags                   = ["${compact(concat(list("${var.region}-egress"), var.tags))}"]
+  next_hop_instance      = "${element(split("/", element(module.nat-gateway.instances[0], 0)), 10)}"
+  next_hop_instance_zone = "${local.zone}"
+  tags                   = ["${compact(concat(list(local.regional_tag), var.tags))}"]
   priority               = "${var.route_priority}"
 }
 
 resource "google_compute_firewall" "nat-gateway" {
-  name    = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
+  count   = "${var.module_enabled ? 1 : 0}"
+  name    = "${local.zonal_tag}"
   network = "${var.network}"
   project = "${var.project}"
 
@@ -101,13 +107,13 @@ resource "google_compute_firewall" "nat-gateway" {
     protocol = "all"
   }
 
-  source_tags = ["${compact(concat(list("${var.region}-egress", "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"), var.tags))}"]
-  target_tags = ["${compact(concat(list("${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"), var.tags))}"]
+  source_tags = ["${compact(concat(list("${local.regional_tag}", "${local.zonal_tag}"), var.tags))}"]
+  target_tags = ["${compact(concat(local.instance_tags, var.tags))}"]
 }
 
 resource "google_compute_address" "default" {
-  count   = "${var.ip_address_name == "" ? 1 : 0}"
-  name    = "${var.zone == "" ? lookup(var.region_params["${var.region}"], "zone") : var.zone}-egress"
+  count   = "${var.module_enabled && var.ip_address_name == "" ? 1 : 0}"
+  name    = "${local.zonal_tag}"
   project = "${var.project}"
   region  = "${var.region}"
 }

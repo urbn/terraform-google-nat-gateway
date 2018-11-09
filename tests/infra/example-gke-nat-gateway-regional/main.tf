@@ -19,7 +19,11 @@ variable region {
 }
 
 variable zone {
-  default = "us-central1-f"
+  default = "us-central1-a"
+}
+
+variable network_name {
+  default = "tf-ci-nat-gke-regional"
 }
 
 data "google_client_config" "current" {}
@@ -28,22 +32,17 @@ provider google {
   region = "${var.region}"
 }
 
-// External data source to fetch latest regional versions (beta).
-data "external" "container-regional-versions-beta" {
-  program = ["${path.module}/get_server_config_beta.sh"]
-
-  query = {
-    region = "${var.region}"
-  }
+data "google_container_engine_versions" "default" {
+  zone = "${var.zone}"
 }
 
 resource "google_compute_network" "tf-ci" {
-  name                    = "tf-ci-nat-gke-regional"
+  name                    = "${var.network_name}"
   auto_create_subnetworks = "false"
 }
 
 resource "google_compute_subnetwork" "tf-ci" {
-  name                     = "tf-ci-nat-gke-regional"
+  name                     = "${var.network_name}"
   ip_cidr_range            = "10.127.0.0/20"
   network                  = "${google_compute_network.tf-ci.self_link}"
   region                   = "${var.region}"
@@ -51,12 +50,17 @@ resource "google_compute_subnetwork" "tf-ci" {
 }
 
 resource "google_container_cluster" "tf-ci" {
-  name               = "tf-ci-regional"
+  name               = "${var.network_name}"
   region             = "${var.region}"
   initial_node_count = 1
-  min_master_version = "${data.external.container-regional-versions-beta.result.latest_master_version}"
+  min_master_version = "${data.google_container_engine_versions.default.latest_node_version}"
   network            = "${google_compute_subnetwork.tf-ci.network}"
   subnetwork         = "${google_compute_subnetwork.tf-ci.name}"
+
+  timeouts {
+    create = "30m"
+    delete = "30m"
+  }
 }
 
 output network {

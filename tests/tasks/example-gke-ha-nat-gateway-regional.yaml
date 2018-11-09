@@ -35,7 +35,10 @@ params:
   example_dir:
   infra_dir:
   region:
-  zone:
+  TF_VAR_zone1:
+  TF_VAR_zone2:
+  TF_VAR_zone3:
+  TF_VAR_name:
 run:
   path: bash
   args:
@@ -49,8 +52,12 @@ run:
     apk add --update jq curl
     gcloud auth activate-service-account --key-file=${SA_JSON}
     gcloud config set project $project_id
-    gcloud config set compute/zone $zone
-    echo "y" | gcloud components install kubectl
+    gcloud components install --quiet beta
+
+    # Install kubectl that supports `kubectl wait`
+    K8S_VERSION=v1.11.0
+    curl -sfSL https://storage.googleapis.com/kubernetes-release/release/${K8S_VERSION}/bin/linux/amd64/kubectl > /usr/local/bin/kubectl
+    chmod +x /usr/local/bin/kubectl
 
     BASE_DIR=${PWD}
 
@@ -91,7 +98,7 @@ run:
 
     cat > terraform.tfvars <<EOF
     region = "$region"
-    zone = "$zone"
+    zones = ["${TF_VAR_zone1}", "${TF_VAR_zone1}", "${TF_VAR_zone1}"]
     network_name = "$env_name"
     EOF
 
@@ -113,7 +120,6 @@ run:
     # Extract params from terraform outputs    
     NETWORK=$(terraform output subnetwork_name)
     REGION=$(terraform output cluster_region)
-    ZONE=$(terraform output cluster_zone)
     CLUSTER_NAME=$(terraform output cluster_name)
 
     # Change to example directory
@@ -122,12 +128,13 @@ run:
     # Generate terraform.tfvars
     NODE_TAG=$(gcloud compute instance-templates describe $(gcloud compute instance-templates list --filter=name~gke-${CLUSTER_NAME:0:20} --limit=1 --uri) --format='get(properties.tags.items[0])')
     test -n "${NODE_TAG}"
-    
+    MASTER_IP=$(gcloud compute firewall-rules describe ${NODE_TAG/-node/-ssh} --format='value(sourceRanges)')
+    test -n "${MASTER_IP}"
+
     cat > terraform.tfvars <<EOF
     network       = "${NETWORK}"
     region        = "${REGION}"
-    zone          = "${ZONE}"
-    gke_master_ip = ""
+    gke_master_ip = "${MASTER_IP}"
     gke_node_tag  = "${NODE_TAG}"
     EOF
 
@@ -148,20 +155,15 @@ run:
       terraform apply -no-color -input=false -lock=false -auto-approve terraform.tfplan | tee ${EMAIL}/body-failed
 
       echo "" > ${EMAIL}/body-failed
-      gcloud container clusters get-credentials ${CLUSTER_NAME} --zone ${ZONE}
-      NAT_IP=$(terraform output ip-nat-gateway)
-      count=0
-      EXTERNAL_IP=""
-      while [[ $count -lt 3 && "${NAT_IP}" != "$(tr -d '\r' <<<${EXTERNAL_IP})" ]]; do
-        EXTERNAL_IP=$(kubectl run example-$(date "+%s") -i -t --rm --restart=Never --image centos:7 -- curl -s http://ipinfo.io/ip || true)
-        ((count=count+1))
-      done
-      test $count -lt 3
+      export CLOUDSDK_CONTAINER_USE_V1_API_CLIENT=false
+      gcloud beta container clusters get-credentials ${CLUSTER_NAME} --region ${REGION}
+      
+      bash -xe ./test.sh | tee ${EMAIL}/body-failed
     }
-
+    
     # Run Terraform and tests
     apply_and_run_test
-    
+
     ### Begin upgrade test
     if [[ "${git_src}" != "${git_target}" ]]; then
       

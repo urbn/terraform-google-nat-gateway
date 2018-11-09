@@ -25,14 +25,25 @@ image_resource:
 params:
   service_account_json:
   project_id:
-  region:
-  zone:
+  env_name:
+  example_dir:
+  infra_dir:
+image_resource:
+  type: docker-image
+  source:
+    repository: google/cloud-sdk
+    tag: alpine
+platform: linux
+inputs:
+- name: git
 run:
   path: bash
   args:
   - -exc
   - |
-    set -o pipefail
+    set -x
+    set -e
+
     SA_JSON=${PWD}/service_account.json
     cat > ${SA_JSON} <<EOF
     $service_account_json
@@ -40,21 +51,22 @@ run:
     apk add --update jq curl
     gcloud auth activate-service-account --key-file=${SA_JSON}
     gcloud config set project $project_id
-    gcloud config set compute/zone $zone
 
     cd git
 
-    # Setup email
-    EMAIL=${PWD}/../email
-    echo "terraform-google-nat-gateway/check-nat-region-map: Failed to check NAT regions" > ${EMAIL}/subject-failed
-    git --no-pager show > ${EMAIL}/body-failed
+    # Install latest terraform
+    bash examples/terraform-install.sh
+    source ${HOME}/.bashrc
+    terraform version
 
-    # Install json2hcl
-    curl -SsL https://github.com/kvz/json2hcl/releases/download/v0.0.6/json2hcl_v0.0.6_linux_amd64 \
-      | tee /usr/local/bin/json2hcl > /dev/null && chmod 755 /usr/local/bin/json2hcl && json2hcl -version
+    # Env for terraform google provider
+    export GOOGLE_APPLICATION_CREDENTIALS=${SA_JSON}
+    export GOOGLE_PROJECT=$project_id
 
-    # Extract current regions from variables.tf
-    TF_REGIONS=$(cat variables.tf | json2hcl -reverse | jq -r '.variable[].region_params | select(. != null) | .[].default[] | keys[]' | sort)
-    GCP_REGIONS=$(gcloud compute regions list --format='value(name)' | sort)
-    
-    diff <(echo $TF_REGIONS) <(echo $GCP_REGIONS) | tee ${EMAIL}/body-failed
+    # Cleanup example
+    (cd "${example_dir}" && ../../tests/cleanup.sh ${env_name})
+
+    # Cleanup infra
+    if [[ -n "${infra_dir}" ]]; then
+      (cd "${infra_dir}" && ../../cleanup.sh ${env_name}-infra)
+    fi

@@ -65,7 +65,8 @@ resource "google_compute_subnetwork" "staging" {
 }
 
 module "staging-mig1" {
-  source             = "github.com/GoogleCloudPlatform/terraform-google-managed-instance-group"
+  source             = "GoogleCloudPlatform/managed-instance-group/google"
+  version            = "1.1.13"
   region             = "${var.region}"
   zone               = "${var.zone}"
   name               = "${var.staging_mig_name}"
@@ -73,7 +74,7 @@ module "staging-mig1" {
   subnetwork         = "${google_compute_subnetwork.staging.name}"
   size               = 2
   access_config      = []
-  target_tags        = ["allow-staging", "staging-nat-${var.region}"]
+  target_tags        = ["allow-staging", "${var.staging_network_name}-nat-${var.region}"]
   service_port       = 80
   service_port_name  = "http"
   wait_for_instances = true
@@ -82,9 +83,8 @@ module "staging-mig1" {
 }
 
 module "staging-nat-gateway" {
-  // source  = "github.com/GoogleCloudPlatform/terraform-google-nat-gateway"
   source     = "../../"
-  name       = "staging-"
+  name       = "${var.staging_network_name}-"
   region     = "${var.region}"
   network    = "${google_compute_network.staging.name}"
   subnetwork = "${google_compute_subnetwork.staging.name}"
@@ -105,7 +105,8 @@ resource "google_compute_subnetwork" "production" {
 }
 
 module "production-mig1" {
-  source             = "github.com/GoogleCloudPlatform/terraform-google-managed-instance-group"
+  source             = "GoogleCloudPlatform/managed-instance-group/google"
+  version            = "1.1.13"
   region             = "${var.region}"
   zone               = "${var.zone}"
   name               = "${var.production_mig_name}"
@@ -113,7 +114,7 @@ module "production-mig1" {
   subnetwork         = "${google_compute_subnetwork.production.name}"
   size               = 2
   access_config      = []
-  target_tags        = ["allow-production", "production-nat-${var.region}"]
+  target_tags        = ["allow-production", "${var.production_network_name}-nat-${var.region}"]
   service_port       = 80
   service_port_name  = "http"
   wait_for_instances = true
@@ -122,17 +123,17 @@ module "production-mig1" {
 }
 
 module "production-nat-gateway" {
-  // source  = "github.com/GoogleCloudPlatform/terraform-google-nat-gateway"
   source     = "../../"
-  name       = "production-"
+  name       = "${var.production_network_name}-"
   region     = "${var.region}"
   network    = "${google_compute_network.production.name}"
   subnetwork = "${google_compute_subnetwork.production.name}"
 }
 
 module "gce-lb-http" {
-  source            = "github.com/GoogleCloudPlatform/terraform-google-lb-http"
-  name              = "multi-nat-http-lb"
+  source            = "GoogleCloudPlatform/lb-http/google"
+  version           = "1.0.8"
+  name              = "${var.production_network_name}-lb"
   target_tags       = ["allow-staging", "allow-production"]
   firewall_networks = ["${google_compute_network.staging.name}", "${google_compute_network.production.name}"]
 
